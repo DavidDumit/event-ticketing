@@ -1,0 +1,2 @@
+-- Tables are added here as the domains are built.
+-- Every statement uses IF NOT EXISTS so init_db() can run on every startup.

@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Local SQLite data (created at startup, never committed)
+data/
+*.db
+
+# Test coverage output
+.coverage
+htmlcov/
+
+# macOS
+.DS_Store
