@@ -9,7 +9,7 @@ Two feature domains (see `ADR.md`):
 
 ## Setup
 
-Requires Python 3.10+.
+Requires Python 3.9+.
 
 ```bash
 python3 -m venv .venv
