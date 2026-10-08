@@ -7,6 +7,7 @@ from tickets.service import (
     EventNotFound,
     SalesClosed,
     SoldOut,
+    TicketAlreadyCancelled,
     TicketLimitReached,
     TicketNotFound,
 )
@@ -151,6 +152,15 @@ def test_cancel_ticket_keeps_the_row(conn):
     service.cancel_ticket(conn, code)
 
     assert conn.execute("SELECT COUNT(*) FROM tickets WHERE code = ?", (code,)).fetchone()[0] == 1
+
+
+def test_cancelling_twice_raises_already_cancelled(conn):
+    event_id = make_event(conn)
+    code = buy(conn, event_id)
+    service.cancel_ticket(conn, code)
+
+    with pytest.raises(TicketAlreadyCancelled):
+        service.cancel_ticket(conn, code)
 
 
 def test_cancel_unknown_code_raises_ticket_not_found(conn):

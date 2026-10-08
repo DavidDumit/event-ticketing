@@ -2,6 +2,8 @@
 import os
 import sqlite3
 
+from flask import current_app, g
+
 SCHEMA_FILE = os.path.join(os.path.dirname(__file__), "schema.sql")
 
 
@@ -20,3 +22,17 @@ def init_db(db_path):
         conn.executescript(f.read())
     conn.commit()
     conn.close()
+
+
+def get_db():
+    """The connection for the current request, opened on first use."""
+    if "db" not in g:
+        g.db = get_connection(current_app.config["DB_PATH"])
+    return g.db
+
+
+def close_db(exc=None):
+    """Registered as a teardown in create_app(): closes the request's connection."""
+    conn = g.pop("db", None)
+    if conn is not None:
+        conn.close()

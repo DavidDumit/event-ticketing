@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}{{ event.name }}{% endblock %}
+{% block content %}
+<h1>{{ event.name }}</h1>
+<p>
+  {{ event.venue }} · {{ event.starts_at | when }}<br>
+  Tickets sold: <strong>{{ event.sold }} / {{ event.capacity }}</strong>
+</p>
+
+<h2>Sell a ticket</h2>
+<form method="post" action="{{ url_for('tickets.sell_ticket', event_id=event.id) }}">
+  <label for="holder_name">Holder name</label>
+  <input id="holder_name" name="holder_name" required>
+
+  <label for="holder_email">Holder email</label>
+  <input id="holder_email" name="holder_email" type="email" required>
+
+  <button type="submit">Sell ticket</button>
+</form>
+
+<h2>Tickets</h2>
+{% if tickets %}
+<table>
+  <tr><th>Code</th><th>Holder</th><th>Email</th><th>Issued</th><th>Status</th><th></th></tr>
+  {% for ticket in tickets %}
+  <tr class="{{ 'cancelled' if ticket.status == 'cancelled' }}">
+    <td><code>{{ ticket.code }}</code></td>
+    <td>{{ ticket.holder_name }}</td>
+    <td>{{ ticket.holder_email }}</td>
+    <td>{{ ticket.issued_at | when }}</td>
+    <td>{{ ticket.status }}</td>
+    <td>
+      {% if ticket.status == 'valid' %}
+      <form method="post" action="{{ url_for('tickets.cancel_ticket', code=ticket.code) }}">
+        <button type="submit">Cancel</button>
+      </form>
+      {% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p>No tickets sold yet.</p>
+{% endif %}
+{% endblock %}

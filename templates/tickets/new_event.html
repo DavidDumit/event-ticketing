@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}New event{% endblock %}
+{% block content %}
+<h1>New event</h1>
+<form method="post">
+  <label for="name">Name</label>
+  <input id="name" name="name" value="{{ form.name }}" required>
+
+  <label for="venue">Venue</label>
+  <input id="venue" name="venue" value="{{ form.venue }}" required>
+
+  <label for="starts_at">Starts at (UTC)</label>
+  <input id="starts_at" name="starts_at" type="datetime-local" value="{{ form.starts_at }}" required>
+
+  <label for="capacity">Capacity</label>
+  <input id="capacity" name="capacity" type="number" min="1" step="1" value="{{ form.capacity }}" required>
+
+  <button type="submit">Create event</button>
+</form>
+{% endblock %}

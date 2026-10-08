@@ -8,6 +8,7 @@ import os
 from flask import Flask
 
 import db
+from tickets.routes import bp as tickets_bp
 
 
 def create_app():
@@ -16,6 +17,8 @@ def create_app():
     # All config from env vars, with sane defaults (deployment contract §7.3, §7.5, §7.9)
     data_dir = os.environ.get("DATA_DIR", os.path.join(os.path.dirname(__file__), "data"))
     app.config["DB_PATH"] = os.path.join(data_dir, "app.db")
+    # Needed by flash(). Set SECRET_KEY in any real deployment.
+    app.secret_key = os.environ.get("SECRET_KEY", "dev-only-not-secret")
 
     # Create the data folder and the database on startup: no manual setup step (§7.4)
     db.init_db(app.config["DB_PATH"])
@@ -28,9 +31,10 @@ def create_app():
         conn.close()
         return {"status": "ok"}
 
-    @app.route("/")
-    def index():
-        return "Event Ticketing is running."
+    # One SQLite connection per request (db.get_db), closed when the request ends
+    app.teardown_appcontext(db.close_db)
+
+    app.register_blueprint(tickets_bp)
 
     return app
 
