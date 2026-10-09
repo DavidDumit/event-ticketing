@@ -8,6 +8,14 @@ Decision: I went with Python and Flask, because Python is the language I'm most 
 Alternatives considered: Django, but it comes with a lot of things I don't need (an admin panel, its own way of handling the database, a fixed project structure), and the assignment says picking it without a reason counts as poor judgement. FastAPI, but it's mainly good for building APIs and fast async apps, and my app is just a few HTML pages with not much traffic. I also looked at SQLAlchemy for the database, but writing plain SQL means I can see exactly what's happening and explain it more easily.
 Consequences: The project stays small and easy to follow, with only a few packages. The downside is that I have to write the SQL myself, and if I change the database structure later there's no automatic tool to update it.
 
+## 2. Keeping tickets and check-in separate so they can be split later
+Date: 2026-10-09
+Status: Decided
+Context: My app has two parts: tickets (organisers create events and sell tickets) and check-in (volunteers let people in at the door). For now they run in one app, but in Assignment 2 they need to become separate services, so I have to decide now where the line between them goes and what is allowed to cross it.
+Decision: Each part has its own folder (`tickets/` and `checkin/`) and its own tables. Check-in never imports any tickets code and never reads the tickets or events tables. The only thing that crosses the line is one question, `validate(code, event_id)`, which is passed into `check_in()` and answers "valid", "cancelled", "wrong_event" or "unknown". Things like the number of tickets sold are also passed in instead of looked up.
+Alternatives considered: Letting check-in import the tickets service or query the tickets table directly. That would be quicker to write, but then check-in would depend on how tickets stores its data, and splitting them later would mean rewriting check-in. I also thought about one shared module for both parts, but then there would be no clear line to cut along.
+Consequences: In Assignment 2, the only change in check-in is that `validate` becomes a web request to the tickets service instead of a normal function call. It also means I can test check-in on its own with a fake validate function. The downside is a bit of repeated code (the small date helpers exist in both parts) and the app has to pass the validate function in every time.
+
 ## 3. No foreign key between the check-in and tickets tables
 Date: 2026-10-07
 Status: Decided
