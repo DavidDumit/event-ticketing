@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Report: {{ event.name }}{% endblock %}
+{% block content %}
+<h1>Attendance: {{ event.name }}</h1>
+<p>{{ event.venue }} · {{ event.starts_at | when }}</p>
+
+<table>
+  <tr><th>Tickets sold</th><td>{{ event.sold }}</td></tr>
+  <tr><th>Checked in</th><td>{{ stats.checked_in }}</td></tr>
+  <tr><th>No-shows</th><td>{{ stats.no_shows }}</td></tr>
+  <tr><th>Attendance rate</th><td>{{ stats.rate }}%</td></tr>
+</table>
+
+<h2>Arrivals per 15 minutes</h2>
+{% if slots %}
+<table>
+  <tr><th>From</th><th>Arrivals</th></tr>
+  {% for slot_start, count in slots %}
+  <tr><td>{{ slot_start | when }}</td><td>{{ count }}</td></tr>
+  {% endfor %}
+</table>
+{% else %}
+<p>No one has checked in yet.</p>
+{% endif %}
+
+<p>
+  <a href="{{ url_for('checkin.door', event_id=event.id) }}">Door check-in</a> ·
+  <a href="{{ url_for('tickets.event_detail', event_id=event.id) }}">Back to event</a>
+</p>
+{% endblock %}

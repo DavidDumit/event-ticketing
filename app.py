@@ -8,6 +8,7 @@ import os
 from flask import Flask
 
 import db
+from checkin.routes import bp as checkin_bp
 from tickets.routes import bp as tickets_bp
 
 
@@ -35,6 +36,7 @@ def create_app():
     app.teardown_appcontext(db.close_db)
 
     app.register_blueprint(tickets_bp)
+    app.register_blueprint(checkin_bp)
 
     return app
 
