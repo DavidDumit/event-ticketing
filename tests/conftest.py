@@ -15,3 +15,19 @@ def conn():
         conn.executescript(f.read())
     yield conn
     conn.close()
+
+
+@pytest.fixture
+def app(tmp_path, monkeypatch):
+    """The real Flask app with an empty database in a temp folder (never data/app.db)."""
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    from app import create_app  # imported here so DATA_DIR is set before create_app() reads it
+
+    app = create_app()
+    app.config["TESTING"] = True
+    return app
+
+
+@pytest.fixture
+def client(app):
+    return app.test_client()
