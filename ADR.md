@@ -32,3 +32,11 @@ Decision: Most of my tests are on the business rules in `tickets/service.py` and
 Alternatives considered: Testing mostly through the pages. That would cover more code per test, but when something fails it's harder to see which rule broke, and every rule would need a full page request. I also thought about browser tests (like Selenium), but that's a lot of setup for a few simple HTML pages.
 Consequences: The rules are tested well and the tests run fast. Thinner parts: some rare error paths in the pages (like a missing name when selling), how the pages look, two people buying the last ticket at the exact same moment (I only checked that once by hand), and the Docker container, which is checked by the provided `run.sh` instead of pytest.
 
+## 5. Not building QR code scanning at the door
+Date: 2026-10-12
+Status: Decided
+Context: At the door, volunteers need to check tickets quickly. The obvious way would be to show a QR code on each ticket and scan it with a phone camera, and I had it in my original plan.
+Decision: I didn't build QR codes. Volunteers type the ticket code into a big input box on the door page instead.
+Alternatives considered: Scanning QR codes with the phone camera. That needs JavaScript in the browser, a camera permission, a scanning library and testing on different phones, which is a lot of extra work and risk for this assignment. Only showing a QR code on the ticket would also need an extra package, and it doesn't help without a scanner. Typing the code still tests all the important logic: is the ticket valid, and has it already been used.
+Consequences: Checking people in is slower, and typing mistakes are possible (they show up as "Unknown ticket code", so nobody gets in by mistake). QR could be added later without changing the database or the check-in logic, because the QR code would just contain the same ticket code.
+
