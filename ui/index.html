@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Event Ticketing</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 40rem; margin: 2rem auto; padding: 0 1rem; }
+    li { margin: .4rem 0; }
+    .ok { color: #1a7f37; } .down { color: #c62828; }
+  </style>
+</head>
+<body>
+  <h1>Event Ticketing</h1>
+  <p>Static UI placeholder. Service status:</p>
+  <ul>
+    <li>Tickets service: <span id="tickets">checking...</span></li>
+    <li>Check-in service: <span id="checkin">checking...</span></li>
+  </ul>
+  <script src="config.js"></script>
+  <script>
+    async function check(id, url) {
+      const el = document.getElementById(id);
+      try {
+        const res = await fetch(url + "/health");
+        const body = await res.json();
+        el.textContent = res.ok ? "ok (version " + body.version + ")" : "unhealthy";
+        el.className = res.ok ? "ok" : "down";
+      } catch (e) {
+        el.textContent = "unreachable";
+        el.className = "down";
+      }
+    }
+    check("tickets", window.CONFIG.TICKETS_URL);
+    check("checkin", window.CONFIG.CHECKIN_URL);
+  </script>
+</body>
+</html>

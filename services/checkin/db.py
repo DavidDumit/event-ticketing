@@ -1,4 +1,4 @@
-"""SQLite helpers. The schema itself lives in schema.sql."""
+"""SQLite helpers for the check-in service. The schema lives in schema.sql."""
 import os
 import sqlite3
 
@@ -9,8 +9,8 @@ SCHEMA_FILE = os.path.join(os.path.dirname(__file__), "schema.sql")
 
 def get_connection(db_path):
     conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row          # rows behave like dicts: row["name"]
-    conn.execute("PRAGMA foreign_keys = ON")  # SQLite has FKs off by default
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
 
@@ -25,14 +25,13 @@ def init_db(db_path):
 
 
 def get_db():
-    """The connection for the current request, opened on first use."""
+    """One connection per request, opened on first use."""
     if "db" not in g:
         g.db = get_connection(current_app.config["DB_PATH"])
     return g.db
 
 
 def close_db(exc=None):
-    """Registered as a teardown in create_app(): closes the request's connection."""
     conn = g.pop("db", None)
     if conn is not None:
         conn.close()
