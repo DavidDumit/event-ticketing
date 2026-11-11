@@ -1,0 +1,41 @@
+# Whole system locally:  docker compose up --build
+# Initial structure: two services, each with its own container and its own
+# SQLite file on its own volume. SQL Server and migrations come in a later step.
+services:
+  tickets:
+    build: ./services/tickets
+    ports:
+      - "8001:8000"
+    environment:
+      PORT: "8000"
+      DATA_DIR: /data
+      UI_ORIGIN: http://localhost:8080
+    volumes:
+      - tickets-data:/data
+
+  checkin:
+    build: ./services/checkin
+    ports:
+      - "8002:8000"
+    environment:
+      PORT: "8000"
+      DATA_DIR: /data
+      UI_ORIGIN: http://localhost:8080
+      TICKETS_URL: http://tickets:8000   # found by service name, not a hardcoded host
+      TICKETS_TIMEOUT_S: "2"
+    volumes:
+      - checkin-data:/data
+    depends_on:
+      - tickets
+
+  # Static UI served by a stock image, no Dockerfile (not a service container)
+  ui:
+    image: nginx:1.27-alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./ui:/usr/share/nginx/html:ro
+
+volumes:
+  tickets-data:
+  checkin-data:

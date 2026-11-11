@@ -14,3 +14,8 @@ htmlcov/
 
 # macOS
 .DS_Store
+
+# Secrets and local tooling output (never committed)
+.env
+Claude outputs/
+.pytest_cache/
