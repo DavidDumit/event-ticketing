@@ -1,0 +1,65 @@
+# CI: runs on every push (any branch) and every pull request.
+#  - test:   installs and tests each service, fails if coverage < 70%
+#  - images: builds the Docker image of each service; pushes it to GHCR,
+#            tagged with the commit SHA, only on pushes to main
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [tickets, checkin]
+    defaults:
+      run:
+        working-directory: services/${{ matrix.service }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Test with coverage (fails under 70%)
+        run: python -m pytest --cov=${{ matrix.service }} --cov-report=term-missing --cov-fail-under=70
+
+  images:
+    needs: test   # only build images of code whose tests passed
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write   # needed to push to GHCR with GITHUB_TOKEN
+    strategy:
+      matrix:
+        service: [tickets, checkin]
+    env:
+      # GHCR names must be lowercase: DavidDumit -> daviddumit
+      IMAGE: ghcr.io/daviddumit/event-ticketing-${{ matrix.service }}
+      PUSH: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR (main only)
+        if: env.PUSH == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build image (and push on main)
+        uses: docker/build-push-action@v6
+        with:
+          context: services/${{ matrix.service }}
+          push: ${{ env.PUSH == 'true' }}
+          tags: ${{ env.IMAGE }}:${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/DavidDumit/event-ticketing
+            org.opencontainers.image.revision=${{ github.sha }}
