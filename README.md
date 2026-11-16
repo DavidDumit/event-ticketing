@@ -25,9 +25,21 @@ returns `503 TicketsUnavailable` and the report degrades to check-in's own numbe
 
 ## Run the whole system
 
+Once, create your local `.env` with your own passwords (it is gitignored, never commit it):
+
+```bash
+cp .env.example .env     # then edit the three passwords
+```
+
+Then:
+
 ```bash
 docker compose up --build
 ```
+
+Compose starts SQL Server, runs `db/init.sql` once (the `db-init` job: one database and one
+login per service, idempotent), then the two services and the UI. On Apple Silicon, enable
+*Use Rosetta for x86_64/amd64 emulation* in Docker Desktop for the SQL Server image.
 
 | URL | What |
 |---|---|
@@ -55,6 +67,7 @@ PORT=8001 python app.py        # check-in: PORT=8002 TICKETS_URL=http://localhos
 | `DATA_DIR` | both | `./data` (`/data` in Docker) | Folder for the service's own SQLite file |
 | `UI_ORIGIN` | both | `http://localhost:8080` | The only origin allowed by CORS |
 | `GIT_SHA` | both | `dev` | Version reported by `/health` |
+| `DATABASE_URL` | both | none (secret) | Connection string of the service's own SQL Server database |
 | `TICKETS_URL` | checkin | `http://localhost:8001` | Base URL of the tickets service (`http://tickets:8000` in compose) |
 | `TICKETS_TIMEOUT_S` | checkin | `2` | Timeout in seconds for calls to tickets |
 
