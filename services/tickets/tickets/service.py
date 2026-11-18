@@ -1,4 +1,4 @@
-"""Business logic for the Tickets domain. Plain sqlite3, no Flask."""
+"""Business logic for the Tickets domain. Plain SQL through sqlserver.Connection, no Flask."""
 import secrets
 from datetime import datetime, timezone
 
@@ -38,7 +38,7 @@ def _now():
 
 
 def _to_iso(dt):
-    """datetime -> '2026-10-06T19:30:00Z' (UTC), the format schema.sql uses."""
+    """datetime -> '2026-10-06T19:30:00Z' (UTC), the format the migrations use."""
     return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
@@ -51,14 +51,15 @@ def _from_iso(text):
 
 
 def create_event(conn, name, venue, starts_at, capacity):
-    """Store a new event and return its id. capacity > 0 is enforced by schema.sql."""
+    """Store a new event and return its id. capacity > 0 is enforced by the database."""
     starts_at = _to_iso(_from_iso(starts_at))  # normalise so every stored time looks the same
     with conn:
-        cur = conn.execute(
-            "INSERT INTO events (name, venue, starts_at, capacity, created_at) VALUES (?, ?, ?, ?, ?)",
+        row = conn.execute(
+            "INSERT INTO events (name, venue, starts_at, capacity, created_at) "
+            "OUTPUT INSERTED.id VALUES (?, ?, ?, ?, ?)",
             (name, venue, starts_at, capacity, _to_iso(_now())),
-        )
-    return cur.lastrowid
+        ).fetchone()
+    return int(row[0])
 
 
 def issue_ticket(conn, event_id, holder_name, holder_email, now=None):
@@ -66,12 +67,12 @@ def issue_ticket(conn, event_id, holder_name, holder_email, now=None):
     now = now or _now()
     holder_email = holder_email.strip().lower()  # 'A@x.com' and 'a@x.com' count as the same holder
 
-    # Take the write lock before counting, so two sales at once can't both
-    # see the last free seat and oversell the event.
-    conn.execute("BEGIN IMMEDIATE")
+    # Lock this event's row before counting (UPDLOCK, HOLDLOCK, held until commit),
+    # so two sales at once for the same event wait for each other and can't both
+    # see the last free seat. Sales for other events are not blocked.
     try:
         event = conn.execute(
-            "SELECT starts_at, capacity FROM events WHERE id = ?", (event_id,)
+            "SELECT starts_at, capacity FROM events WITH (UPDLOCK, HOLDLOCK) WHERE id = ?", (event_id,)
         ).fetchone()
         if event is None:
             raise EventNotFound(event_id)
@@ -127,13 +128,13 @@ def validate_ticket(conn, code, event_id):
         return "unknown"
     if ticket[0] != event_id:
         return "wrong_event"
-    return ticket[1]  # 'valid' or 'cancelled', guaranteed by the CHECK in schema.sql
+    return ticket[1]  # 'valid' or 'cancelled', guaranteed by the CHECK constraint
 
 
 # --- Read-only helpers for the pages -------------------------------------
 
 def _dicts(cur):
-    """Rows as plain dicts, whatever row_factory the connection uses."""
+    """Rows as plain dicts, using the column names from the cursor."""
     columns = [c[0] for c in cur.description]
     return [dict(zip(columns, row)) for row in cur.fetchall()]
 

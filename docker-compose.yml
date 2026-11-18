@@ -1,32 +1,74 @@
-# Whole system locally:  docker compose up --build
-# Initial structure: two services, each with its own container and its own
-# SQLite file on its own volume. SQL Server and migrations come in a later step.
+# Whole system locally:  cp .env.example .env   (once, then set your passwords)
+#                        docker compose up --build
+# Passwords come from .env (gitignored), never from this file.
 services:
+  # One SQL Server holding one database per service (tickets, checkin)
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    platform: linux/amd64          # Apple Silicon: needs Rosetta enabled in Docker Desktop
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:?set MSSQL_SA_PASSWORD in .env}
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver-data:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q 'SELECT 1' -b -o /dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  # One-off job: runs db/init.sql (databases + logins), then exits
+  db-init:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    platform: linux/amd64
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    environment:
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD}
+      TICKETS_DB_PASSWORD: ${TICKETS_DB_PASSWORD:?set TICKETS_DB_PASSWORD in .env}
+      CHECKIN_DB_PASSWORD: ${CHECKIN_DB_PASSWORD:?set CHECKIN_DB_PASSWORD in .env}
+    volumes:
+      - ./db:/db:ro
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - >-
+        /opt/mssql-tools18/bin/sqlcmd -C -b -S sqlserver -U sa -P "$$MSSQL_SA_PASSWORD"
+        -i /db/init.sql
+        -v TICKETS_DB_PASSWORD="$$TICKETS_DB_PASSWORD" CHECKIN_DB_PASSWORD="$$CHECKIN_DB_PASSWORD"
+    restart: "no"
+
   tickets:
     build: ./services/tickets
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
     ports:
       - "8001:8000"
     environment:
       PORT: "8000"
-      DATA_DIR: /data
       UI_ORIGIN: http://localhost:8080
-    volumes:
-      - tickets-data:/data
+      # Own login, own database: migrations run on startup
+      DATABASE_URL: mssql+pymssql://tickets_user:${TICKETS_DB_PASSWORD}@sqlserver:1433/tickets
 
   checkin:
     build: ./services/checkin
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+      tickets:
+        condition: service_started
     ports:
       - "8002:8000"
     environment:
       PORT: "8000"
-      DATA_DIR: /data
       UI_ORIGIN: http://localhost:8080
       TICKETS_URL: http://tickets:8000   # found by service name, not a hardcoded host
       TICKETS_TIMEOUT_S: "2"
-    volumes:
-      - checkin-data:/data
-    depends_on:
-      - tickets
+      DATABASE_URL: mssql+pymssql://checkin_user:${CHECKIN_DB_PASSWORD}@sqlserver:1433/checkin
 
   # Static UI served by a stock image, no Dockerfile (not a service container)
   ui:
@@ -37,5 +79,4 @@ services:
       - ./ui:/usr/share/nginx/html:ro
 
 volumes:
-  tickets-data:
-  checkin-data:
+  sqlserver-data:

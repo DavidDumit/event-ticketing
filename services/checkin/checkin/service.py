@@ -1,11 +1,12 @@
-"""Business logic for the Check-in domain. Plain sqlite3, no Flask.
+"""Business logic for the Check-in domain. Plain SQL through sqlserver.Connection, no Flask.
 
 This module only touches the check_ins table and never imports tickets/.
 The Tickets domain is reached through the `validate(code, event_id)` function
 the caller passes in, so it can later be swapped for an HTTP call.
 """
-import sqlite3
 from datetime import datetime, timezone
+
+from sqlserver import IntegrityError
 
 
 class CheckInError(Exception):
@@ -32,7 +33,7 @@ def _now():
 
 
 def _to_iso(dt):
-    """datetime -> '2026-10-06T19:30:00Z' (UTC), the format schema.sql uses."""
+    """datetime -> '2026-10-06T19:30:00Z' (UTC), the format the migrations use."""
     return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
@@ -58,7 +59,7 @@ def check_in(conn, code, event_id, validate, now=None):
                 "INSERT INTO check_ins (ticket_code, event_id, checked_in_at) VALUES (?, ?, ?)",
                 (code, event_id, _to_iso(now)),
             )
-    except sqlite3.IntegrityError:
+    except IntegrityError:
         first = conn.execute(
             "SELECT checked_in_at FROM check_ins WHERE ticket_code = ?", (code,)
         ).fetchone()
