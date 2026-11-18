@@ -10,6 +10,8 @@ import time
 from flask import Flask, g, jsonify, request
 
 import db
+import migrate
+import sqlserver
 from tickets import service
 
 log = logging.getLogger("tickets")
@@ -27,12 +29,18 @@ ERROR_STATUS = {
 
 def create_app():
     app = Flask(__name__)
-    data_dir = os.environ.get("DATA_DIR", os.path.join(os.path.dirname(__file__), "data"))
-    app.config["DB_PATH"] = os.path.join(data_dir, "tickets.db")
+    app.config["DATABASE_URL"] = os.environ.get("DATABASE_URL", "")
+    if not app.config["DATABASE_URL"]:
+        raise RuntimeError("DATABASE_URL is not set (see README)")
     app.config["VERSION"] = os.environ.get("GIT_SHA", "dev")
     app.config["UI_ORIGIN"] = os.environ.get("UI_ORIGIN", "http://localhost:8080")
 
-    db.init_db(app.config["DB_PATH"])
+    # Apply pending migrations once at startup (waits for the database to be ready)
+    conn = sqlserver.connect(app.config["DATABASE_URL"])
+    try:
+        migrate.apply_migrations(conn)
+    finally:
+        conn.close()
     app.teardown_appcontext(db.close_db)
 
     @app.before_request
@@ -58,11 +66,15 @@ def create_app():
     def health():
         """200 if this service can read and write its own database, 503 otherwise."""
         try:
-            conn = db.get_connection(app.config["DB_PATH"])
-            conn.execute("SELECT COUNT(*) FROM events").fetchone()
-            conn.execute("BEGIN IMMEDIATE")  # takes the write lock: proves we can write
-            conn.rollback()
-            conn.close()
+            conn = sqlserver.connect(app.config["DATABASE_URL"], attempts=1)
+            try:
+                conn.execute("SELECT COUNT(*) FROM events").fetchone()  # can read
+                # can write: a real UPDATE inside a transaction that is rolled back
+                conn.execute("UPDATE schema_migrations SET applied_at = applied_at "
+                             "WHERE version = (SELECT MIN(version) FROM schema_migrations)")
+                conn.rollback()
+            finally:
+                conn.close()
             return jsonify(status="ok", db="ok", version=app.config["VERSION"])
         except Exception:
             return jsonify(status="error", db="unavailable", version=app.config["VERSION"]), 503

@@ -50,12 +50,9 @@ services:
       - "8001:8000"
     environment:
       PORT: "8000"
-      DATA_DIR: /data
       UI_ORIGIN: http://localhost:8080
-      # Used once the service moves to SQL Server (next step)
+      # Own login, own database: migrations run on startup
       DATABASE_URL: mssql+pymssql://tickets_user:${TICKETS_DB_PASSWORD}@sqlserver:1433/tickets
-    volumes:
-      - tickets-data:/data
 
   checkin:
     build: ./services/checkin
@@ -68,13 +65,10 @@ services:
       - "8002:8000"
     environment:
       PORT: "8000"
-      DATA_DIR: /data
       UI_ORIGIN: http://localhost:8080
       TICKETS_URL: http://tickets:8000   # found by service name, not a hardcoded host
       TICKETS_TIMEOUT_S: "2"
       DATABASE_URL: mssql+pymssql://checkin_user:${CHECKIN_DB_PASSWORD}@sqlserver:1433/checkin
-    volumes:
-      - checkin-data:/data
 
   # Static UI served by a stock image, no Dockerfile (not a service container)
   ui:
@@ -86,5 +80,3 @@ services:
 
 volumes:
   sqlserver-data:
-  tickets-data:
-  checkin-data:

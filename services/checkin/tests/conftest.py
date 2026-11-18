@@ -1,28 +1,38 @@
+"""Tests run against a real SQL Server test database (never Azure SQL).
+
+Set TEST_DATABASE_URL, e.g. locally with compose running:
+  TEST_DATABASE_URL=mssql+pymssql://sa:<MSSQL_SA_PASSWORD>@localhost:1433/checkin_test
+In CI it points at a throwaway SQL Server container.
+"""
 import os
-import sqlite3
 
 import pytest
 
-SCHEMA_FILE = os.path.join(os.path.dirname(__file__), "..", "schema.sql")
+import migrate
+import sqlserver
+
+TEST_URL = os.environ.get("TEST_DATABASE_URL", "")
+TABLES = ["check_ins"]
 
 
-@pytest.fixture
-def conn():
-    """A fresh in-memory database with this service's schema, one per test."""
-    conn = sqlite3.connect(":memory:")
-    conn.execute("PRAGMA foreign_keys = ON")
-    with open(SCHEMA_FILE) as f:
-        conn.executescript(f.read())
-    yield conn
+@pytest.fixture(scope="session")
+def database():
+    """Apply the real migrations to the test database once per test run."""
+    if not TEST_URL:
+        pytest.skip("TEST_DATABASE_URL is not set (see README: Tests)")
+    conn = sqlserver.connect(TEST_URL)
+    migrate.apply_migrations(conn)
     conn.close()
+    return TEST_URL
 
 
 @pytest.fixture
-def client(tmp_path, monkeypatch):
-    """The real Flask app with an empty database in a temp folder."""
-    monkeypatch.setenv("DATA_DIR", str(tmp_path))
-    from app import create_app
-
-    app = create_app()
-    app.config["TESTING"] = True
-    return app.test_client()
+def conn(database):
+    """A connection to an emptied test database, one per test."""
+    conn = sqlserver.connect(database)
+    for table in TABLES:
+        conn.execute(f"DELETE FROM {table}")
+    conn.commit()
+    yield conn
+    conn.rollback()
+    conn.close()

@@ -7,6 +7,11 @@ IF DB_ID('tickets') IS NULL CREATE DATABASE tickets;
 GO
 IF DB_ID('checkin') IS NULL CREATE DATABASE checkin;
 GO
+-- Empty databases for running the test suites locally (sa only, see README: Tests)
+IF DB_ID('tickets_test') IS NULL CREATE DATABASE tickets_test;
+GO
+IF DB_ID('checkin_test') IS NULL CREATE DATABASE checkin_test;
+GO
 
 -- Logins: create if missing, otherwise just update the password from .env
 IF SUSER_ID('tickets_user') IS NULL
