@@ -5,34 +5,247 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Event Ticketing</title>
   <style>
-    body { font-family: system-ui, sans-serif; max-width: 40rem; margin: 2rem auto; padding: 0 1rem; }
-    li { margin: .4rem 0; }
-    .ok { color: #1a7f37; } .down { color: #c62828; }
+    body { font-family: system-ui, sans-serif; max-width: 52rem; margin: 1.5rem auto; padding: 0 1rem; color: #1f2328; }
+    h1 { margin-bottom: .2rem; }
+    section { border: 1px solid #d0d7de; border-radius: 8px; padding: 1rem; margin: 1rem 0; }
+    h2 { margin-top: 0; font-size: 1.2rem; }
+    form { display: flex; flex-wrap: wrap; gap: .5rem; align-items: end; }
+    label { display: flex; flex-direction: column; font-size: .85rem; gap: .2rem; }
+    input, select, button { font: inherit; padding: .4rem .6rem; }
+    button { cursor: pointer; }
+    table { border-collapse: collapse; width: 100%; margin-top: .6rem; }
+    section { overflow-x: auto; }  /* wide tables scroll inside their box on phones */
+    th, td { text-align: left; padding: .35rem .5rem; border-bottom: 1px solid #eaeef2; font-size: .92rem; }
+    .msg { margin: .6rem 0 0; font-weight: 600; min-height: 1.2em; }
+    .ok { color: #1a7f37; } .bad { color: #c62828; } .muted { color: #656d76; }
+    #door-code { font-size: 1.4rem; width: 14rem; letter-spacing: .05em; }
+    .status span { margin-right: 1.2rem; }
   </style>
 </head>
 <body>
   <h1>Event Ticketing</h1>
-  <p>Static UI placeholder. Service status:</p>
-  <ul>
-    <li>Tickets service: <span id="tickets">checking...</span></li>
-    <li>Check-in service: <span id="checkin">checking...</span></li>
-  </ul>
+  <p class="status muted">
+    <span>Tickets service: <b id="tickets-health">checking...</b></span>
+    <span>Check-in service: <b id="checkin-health">checking...</b></span>
+  </p>
+
+  <!-- Organiser: events (tickets service) -->
+  <section>
+    <h2>Events</h2>
+    <form id="event-form">
+      <label>Name <input name="name" required></label>
+      <label>Venue <input name="venue" required></label>
+      <label>Starts at <input name="starts_at" type="datetime-local" required></label>
+      <label>Capacity <input name="capacity" type="number" min="1" required style="width:6rem"></label>
+      <button>Create event</button>
+    </form>
+    <p class="msg" id="event-msg"></p>
+    <table>
+      <thead><tr><th>Event</th><th>Venue</th><th>Starts</th><th>Sold / capacity</th></tr></thead>
+      <tbody id="event-rows"></tbody>
+    </table>
+  </section>
+
+  <p><label>Selected event <select id="event-select"></select></label></p>
+
+  <!-- Organiser: sell and cancel tickets (tickets service) -->
+  <section>
+    <h2>Tickets</h2>
+    <form id="ticket-form">
+      <label>Holder name <input name="holder_name" required></label>
+      <label>Holder email <input name="holder_email" type="email" required></label>
+      <button>Issue ticket</button>
+    </form>
+    <p class="msg" id="ticket-msg"></p>
+    <table>
+      <thead><tr><th>Code</th><th>Holder</th><th>Email</th><th>Status</th><th></th></tr></thead>
+      <tbody id="ticket-rows"></tbody>
+    </table>
+  </section>
+
+  <!-- Volunteer at the door (check-in service, which asks tickets over HTTP) -->
+  <section>
+    <h2>Door check-in</h2>
+    <form id="door-form">
+      <label>Ticket code <input id="door-code" name="code" autocomplete="off" required></label>
+      <button>Check in</button>
+    </form>
+    <p class="msg" id="door-msg"></p>
+  </section>
+
+  <!-- Organiser: attendance report (check-in service) -->
+  <section>
+    <h2>Attendance report <button id="report-refresh" type="button">Refresh</button></h2>
+    <div id="report" class="muted">Select an event.</div>
+  </section>
+
   <script src="config.js"></script>
   <script>
-    async function check(id, url) {
-      const el = document.getElementById(id);
+    // The browser calls both services directly (no gateway). Their base URLs come
+    // from config.js; each service only allows this page's origin via CORS.
+    const TICKETS = window.CONFIG.TICKETS_URL;
+    const CHECKIN = window.CONFIG.CHECKIN_URL;
+    const $ = (id) => document.getElementById(id);
+
+    // fetch() wrapper: returns {ok, status, body}; a network failure becomes status 0
+    async function api(url, options = {}) {
       try {
-        const res = await fetch(url + "/health");
-        const body = await res.json();
-        el.textContent = res.ok ? "ok (version " + body.version + ")" : "unhealthy";
-        el.className = res.ok ? "ok" : "down";
+        const res = await fetch(url, {
+          ...options,
+          headers: options.body ? { "Content-Type": "application/json" } : {},
+        });
+        const body = await res.json().catch(() => ({}));
+        return { ok: res.ok, status: res.status, body };
       } catch (e) {
-        el.textContent = "unreachable";
-        el.className = "down";
+        return { ok: false, status: 0, body: { detail: "service unreachable" } };
       }
     }
-    check("tickets", window.CONFIG.TICKETS_URL);
-    check("checkin", window.CONFIG.CHECKIN_URL);
+    const post = (url, data) => api(url, { method: "POST", body: JSON.stringify(data || {}) });
+
+    function show(id, text, good) {
+      $(id).textContent = text;
+      $(id).className = "msg " + (good ? "ok" : "bad");
+    }
+
+    // Build a table row with textContent only, so user input is never run as HTML
+    function row(cells) {
+      const tr = document.createElement("tr");
+      for (const c of cells) {
+        const td = document.createElement("td");
+        if (c instanceof Node) td.appendChild(c); else td.textContent = c;
+        tr.appendChild(td);
+      }
+      return tr;
+    }
+
+    const when = (iso) => new Date(iso).toLocaleString();
+    const selectedEvent = () => Number($("event-select").value);
+
+    const TICKET_ERRORS = {
+      SalesClosed: "Sales are closed: the event has already started.",
+      SoldOut: "Sold out.",
+      TicketLimitReached: "This email already has the maximum of 2 tickets.",
+      EventNotFound: "Event not found.",
+      TicketAlreadyCancelled: "Ticket was already cancelled.",
+    };
+    const DOOR_REASONS = {
+      unknown: "Unknown ticket code.",
+      cancelled: "This ticket was cancelled.",
+      wrong_event: "This ticket is for a different event.",
+    };
+    const errorText = (r) => TICKET_ERRORS[r.body.error] || r.body.detail || "Error " + r.status;
+
+    // --- Health ---------------------------------------------------------
+    async function health(id, base) {
+      const r = await api(base + "/health");
+      $(id).textContent = r.ok ? "ok (" + r.body.version + ")" : (r.status ? "unhealthy" : "unreachable");
+      $(id).className = r.ok ? "ok" : "bad";
+    }
+
+    // --- Events ---------------------------------------------------------
+    async function loadEvents() {
+      const r = await api(TICKETS + "/events");
+      if (!r.ok) { show("event-msg", "Could not load events: " + errorText(r), false); return; }
+      const keep = $("event-select").value;
+      $("event-rows").replaceChildren(...r.body.map((e) =>
+        row([e.name, e.venue, when(e.starts_at), e.sold + " / " + e.capacity])));
+      $("event-select").replaceChildren(...r.body.map((e) => new Option(e.name + " (#" + e.id + ")", e.id)));
+      if (keep && r.body.some((e) => String(e.id) === keep)) $("event-select").value = keep;
+      refreshSelected();
+    }
+
+    $("event-form").addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      const f = new FormData(ev.target);
+      const r = await post(TICKETS + "/events", {
+        name: f.get("name"),
+        venue: f.get("venue"),
+        starts_at: new Date(f.get("starts_at")).toISOString(),  // local time -> UTC
+        capacity: Number(f.get("capacity")),
+      });
+      if (r.ok) { show("event-msg", "Event created.", true); ev.target.reset(); await loadEvents(); $("event-select").value = r.body.id; refreshSelected(); }
+      else show("event-msg", errorText(r), false);
+    });
+
+    // --- Tickets --------------------------------------------------------
+    async function loadTickets() {
+      const id = selectedEvent();
+      if (!id) { $("ticket-rows").replaceChildren(); return; }
+      const r = await api(TICKETS + "/events/" + id + "/tickets");
+      if (!r.ok) { show("ticket-msg", "Could not load tickets: " + errorText(r), false); return; }
+      $("ticket-rows").replaceChildren(...r.body.map((t) => {
+        let action = "";
+        if (t.status === "valid") {
+          action = document.createElement("button");
+          action.textContent = "Cancel";
+          action.onclick = async () => {
+            const c = await post(TICKETS + "/tickets/" + encodeURIComponent(t.code) + "/cancel");
+            show("ticket-msg", c.ok ? "Ticket " + t.code + " cancelled." : errorText(c), c.ok);
+            loadEvents();
+          };
+        }
+        return row([t.code, t.holder_name, t.holder_email, t.status, action]);
+      }));
+    }
+
+    $("ticket-form").addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      const f = new FormData(ev.target);
+      const r = await post(TICKETS + "/events/" + selectedEvent() + "/tickets",
+        { holder_name: f.get("holder_name"), holder_email: f.get("holder_email") });
+      if (r.ok) { show("ticket-msg", "Ticket issued: " + r.body.code, true); ev.target.reset(); loadEvents(); }
+      else show("ticket-msg", errorText(r), false);
+    });
+
+    // --- Door check-in --------------------------------------------------
+    $("door-form").addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      const code = $("door-code").value.trim();
+      const r = await post(CHECKIN + "/events/" + selectedEvent() + "/checkins", { code });
+      if (r.ok) show("door-msg", "Welcome! " + code + " checked in.", true);
+      else if (r.body.error === "InvalidTicket") show("door-msg", DOOR_REASONS[r.body.reason] || r.body.reason, false);
+      else if (r.body.error === "AlreadyCheckedIn") show("door-msg", "Already checked in at " + when(r.body.checked_in_at) + ".", false);
+      else if (r.status === 503) show("door-msg", "Tickets service unavailable: can't verify tickets right now. Try again.", false);
+      else show("door-msg", errorText(r), false);
+      $("door-code").value = "";
+      $("door-code").focus();
+      loadReport();
+    });
+
+    // --- Report ---------------------------------------------------------
+    async function loadReport() {
+      const id = selectedEvent();
+      if (!id) return;
+      const r = await api(CHECKIN + "/events/" + id + "/report");
+      const box = $("report");
+      if (!r.ok) { box.textContent = "Could not load report: " + errorText(r); box.className = "bad"; return; }
+      const b = r.body;
+      box.className = "";
+      const lines = [
+        "Checked in: " + b.checked_in,
+        "Tickets sold: " + (b.tickets_sold ?? "unknown"),
+        "No-shows: " + (b.no_shows ?? "unknown"),
+        "Attendance rate: " + (b.rate === null || b.rate === undefined ? "unknown" : b.rate + "%"),
+      ];
+      const p = document.createElement("p");
+      p.textContent = lines.join("  ·  ");
+      const parts = [p];
+      if (b.notice) { const n = document.createElement("p"); n.className = "bad"; n.textContent = b.notice; parts.push(n); }
+      if (b.arrivals.length) {
+        const t = document.createElement("table");
+        t.append(row(["Arrivals from", "Check-ins"]), ...b.arrivals.map((s) => row([when(s.slot_start), s.count])));
+        parts.push(t);
+      }
+      box.replaceChildren(...parts);
+    }
+
+    function refreshSelected() { loadTickets(); loadReport(); }
+    $("event-select").addEventListener("change", refreshSelected);
+    $("report-refresh").addEventListener("click", loadReport);
+
+    health("tickets-health", TICKETS);
+    health("checkin-health", CHECKIN);
+    loadEvents();
   </script>
 </body>
 </html>
