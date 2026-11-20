@@ -1,4 +1,5 @@
-# CI: runs on every push (any branch) and every pull request.
+# CI: runs on every push to a branch other than main and on every pull request.
+#     On main it is called by cd.yml (workflow_call), so it doesn't run twice.
 #  - test:   installs and tests each service against a throwaway SQL Server,
 #            fails if coverage < 70%
 #  - images: builds the Docker image of each service; pushes it to GHCR,
@@ -7,7 +8,9 @@ name: CI
 
 on:
   push:
+    branches-ignore: [main]
   pull_request:
+  workflow_call:
 
 permissions:
   contents: read
@@ -76,6 +79,7 @@ jobs:
         with:
           context: services/${{ matrix.service }}
           push: ${{ env.PUSH == 'true' }}
+          provenance: false   # plain image manifest, so Azure Container Apps can pull it
           tags: ${{ env.IMAGE }}:${{ github.sha }}
           labels: |
             org.opencontainers.image.source=https://github.com/DavidDumit/event-ticketing
