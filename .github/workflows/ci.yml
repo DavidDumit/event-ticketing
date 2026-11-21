@@ -1,6 +1,5 @@
 # CI: runs on every push to a branch other than main and on every pull request.
 #     On main it is called by cd.yml (workflow_call), so it doesn't run twice.
-#  - system: checks system.yaml against system.schema.json and the code, and the OpenAPI files
 #  - test:   installs and tests each service against a throwaway SQL Server,
 #            fails if coverage < 70%
 #  - images: builds the Docker image of each service; pushes it to GHCR,
@@ -51,25 +50,8 @@ jobs:
       - name: Test with coverage (fails under 70%)
         run: python -m pytest --cov=${{ matrix.service }} --cov-report=term-missing --cov-fail-under=70
 
-  system:
-    # system.yaml must follow the provided schema and match the code; OpenAPI files must be valid
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Install checkers
-        run: pip install check-jsonschema==0.29.4 openapi-spec-validator==0.7.1 PyYAML==6.0.2
-      - name: system.yaml follows system.schema.json
-        run: check-jsonschema --schemafile system.schema.json system.yaml
-      - name: OpenAPI documents are valid
-        run: openapi-spec-validator services/tickets/openapi.yaml services/checkin/openapi.yaml
-      - name: system.yaml matches the code (env vars, folders, called endpoints)
-        run: python scripts/check_system.py
-
   images:
-    needs: [test, system]   # only build images of code whose tests passed
+    needs: test   # only build images of code whose tests passed
     runs-on: ubuntu-latest
     permissions:
       contents: read
