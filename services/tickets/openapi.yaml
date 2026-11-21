@@ -1,0 +1,137 @@
+openapi: 3.0.3
+info:
+  title: Tickets service
+  version: "1.0"
+  description: >
+    Events and tickets. Called by the UI from the browser (CORS: only UI_ORIGIN) and by the
+    check-in service over HTTP (validate and get event). Every error is JSON
+    {"error": <type>, "detail": <text>}.
+servers:
+  - url: http://localhost:8001
+    description: docker compose
+paths:
+  /health:
+    get:
+      summary: Can this service read and write its own database?
+      responses:
+        "200": { description: Healthy, content: { application/json: { schema: { $ref: "#/components/schemas/Health" } } } }
+        "503": { description: Database unreachable, content: { application/json: { schema: { $ref: "#/components/schemas/Health" } } } }
+  /events:
+    get:
+      summary: All events, soonest first, with valid tickets sold
+      responses:
+        "200":
+          description: Events
+          content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Event" } } } }
+    post:
+      summary: Create an event
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, venue, starts_at, capacity]
+              properties:
+                name: { type: string, example: Jazz Night }
+                venue: { type: string, example: Aula Magna }
+                starts_at: { type: string, format: date-time, example: "2026-12-01T19:00:00Z" }
+                capacity: { type: integer, minimum: 1, example: 120 }
+      responses:
+        "201":
+          description: Created
+          content: { application/json: { schema: { type: object, properties: { id: { type: integer } } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+  /events/{event_id}:
+    parameters: [ { $ref: "#/components/parameters/EventId" } ]
+    get:
+      summary: One event (also used by check-in for the report's tickets sold)
+      responses:
+        "200": { description: The event, content: { application/json: { schema: { $ref: "#/components/schemas/Event" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /events/{event_id}/tickets:
+    parameters: [ { $ref: "#/components/parameters/EventId" } ]
+    get:
+      summary: All tickets of an event, cancelled ones included
+      responses:
+        "200":
+          description: Tickets
+          content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Ticket" } } } }
+    post:
+      summary: Issue a ticket (max 2 valid tickets per email per event; not after the start; not over capacity)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [holder_name, holder_email]
+              properties:
+                holder_name: { type: string }
+                holder_email: { type: string, format: email }
+      responses:
+        "201":
+          description: Issued
+          content: { application/json: { schema: { type: object, properties: { code: { type: string, example: "AbC123xYz_0" } } } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "SalesClosed, SoldOut or TicketLimitReached", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /tickets/{code}/cancel:
+    parameters: [ { $ref: "#/components/parameters/Code" } ]
+    post:
+      summary: Cancel a valid ticket (the row is kept)
+      responses:
+        "200":
+          description: Cancelled
+          content: { application/json: { schema: { type: object, properties: { code: { type: string }, status: { type: string, enum: [cancelled] } } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: TicketAlreadyCancelled, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /tickets/{code}/validate:
+    parameters: [ { $ref: "#/components/parameters/Code" } ]
+    get:
+      summary: Is this code valid for this event? (called by the check-in service at the door)
+      parameters:
+        - { name: event_id, in: query, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Validation result (an unknown code is a normal answer, not a 404)
+          content:
+            application/json:
+              schema: { type: object, properties: { status: { type: string, enum: [valid, cancelled, wrong_event, unknown] } } }
+        "400": { $ref: "#/components/responses/ValidationError" }
+components:
+  parameters:
+    EventId: { name: event_id, in: path, required: true, schema: { type: integer } }
+    Code: { name: code, in: path, required: true, schema: { type: string } }
+  schemas:
+    Health:
+      type: object
+      properties:
+        status: { type: string, enum: [ok, error] }
+        db: { type: string, enum: [ok, unavailable] }
+        version: { type: string, description: Git commit SHA of the running image (GIT_SHA) }
+    Event:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        venue: { type: string }
+        starts_at: { type: string, format: date-time }
+        capacity: { type: integer }
+        sold: { type: integer, description: Valid (not cancelled) tickets }
+    Ticket:
+      type: object
+      properties:
+        code: { type: string }
+        holder_name: { type: string }
+        holder_email: { type: string }
+        status: { type: string, enum: [valid, cancelled] }
+        issued_at: { type: string, format: date-time }
+    Error:
+      type: object
+      properties:
+        error: { type: string, example: SoldOut }
+        detail: { type: string }
+  responses:
+    ValidationError: { description: Missing or invalid input, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+    NotFound: { description: "EventNotFound or TicketNotFound", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
