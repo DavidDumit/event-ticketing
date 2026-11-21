@@ -213,5 +213,7 @@ service applies, in order and each in its own transaction, every file not yet li
 
 ## Documentation
 
-- `ADR.md`: architecture decisions (1-5 from Assignment 1)
+- `ADR.md`: architecture decisions (1-5 from Assignment 1, 6-8 from Assignment 2)
+- `system.yaml`: the whole system (services, env vars, calls, Azure resources), checked in CI against the provided `system.schema.json` and against the code (`scripts/check_system.py`)
+- `services/<name>/openapi.yaml`: the HTTP API of each service
 - `AI_USAGE.md`: how AI was used, and how the accepted code works
