@@ -80,29 +80,30 @@ def create_app():
         if tickets_client.get_event(event_id) is None:
             return jsonify(error="EventNotFound", detail=str(event_id)), 404
         try:
-            service.check_in(db.get_db(), code, event_id, tickets_client.validate)
+            service.check_in(db.get_db(), code, event_id, tickets_client.validate, gate=body.get("gate"))
         except service.InvalidTicket as e:
             return jsonify(error="InvalidTicket", reason=e.reason), 409
         except service.AlreadyCheckedIn as e:
-            return jsonify(error="AlreadyCheckedIn", checked_in_at=e.checked_in_at), 409
+            return jsonify(error="AlreadyCheckedIn", checked_in_at=e.checked_in_at, gate=e.gate), 409
         return jsonify(code=code, status="checked_in"), 201
 
     @app.get("/events/<int:event_id>/report")
     def report(event_id):
         conn = db.get_db()
         slots = [{"slot_start": s, "count": c} for s, c in service.arrivals_by_slot(conn, event_id)]
+        by_gate = service.check_ins_by_gate(conn, event_id)
         try:
             event = tickets_client.get_event(event_id)
         except tickets_client.TicketsUnavailable:
             # Degraded: our own numbers still work, tickets sold is unknown
             checked_in = service.attendance(conn, event_id, 0)["checked_in"]
             return jsonify(event_id=event_id, checked_in=checked_in, tickets_sold=None,
-                           no_shows=None, rate=None, arrivals=slots,
+                           no_shows=None, rate=None, arrivals=slots, by_gate=by_gate,
                            notice="Tickets service unavailable: sales figures not shown.")
         if event is None:
             return jsonify(error="EventNotFound", detail=str(event_id)), 404
         stats = service.attendance(conn, event_id, event["sold"])
-        return jsonify(event_id=event_id, tickets_sold=event["sold"], arrivals=slots, **stats)
+        return jsonify(event_id=event_id, tickets_sold=event["sold"], arrivals=slots, by_gate=by_gate, **stats)
 
     return app
 

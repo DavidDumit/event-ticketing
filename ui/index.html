@@ -68,6 +68,7 @@
   <section>
     <h2>Door check-in</h2>
     <form id="door-form">
+      <label>Gate <input id="door-gate" name="gate" placeholder="main" style="width:7rem"></label>
       <label>Ticket code <input id="door-code" name="code" autocomplete="off" required></label>
       <button>Check in</button>
     </form>
@@ -230,10 +231,11 @@
     $("door-form").addEventListener("submit", async (ev) => {
       ev.preventDefault();
       const code = $("door-code").value.trim();
-      const r = await post(CHECKIN + "/events/" + selectedEvent() + "/checkins", { code });
-      if (r.ok) show("door-msg", "Welcome! " + code + " checked in.", true);
+      const gate = $("door-gate").value.trim() || "main";  // the volunteer's gate stays filled in
+      const r = await post(CHECKIN + "/events/" + selectedEvent() + "/checkins", { code, gate });
+      if (r.ok) show("door-msg", "Welcome! " + code + " checked in at gate " + gate + ".", true);
       else if (r.body.error === "InvalidTicket") show("door-msg", DOOR_REASONS[r.body.reason] || r.body.reason, false);
-      else if (r.body.error === "AlreadyCheckedIn") show("door-msg", "Already checked in at " + when(r.body.checked_in_at) + ".", false);
+      else if (r.body.error === "AlreadyCheckedIn") show("door-msg", "Already checked in at " + when(r.body.checked_in_at) + " at gate " + r.body.gate + ".", false);
       else if (r.body.error === "TicketsUnavailable") show("door-msg", "Tickets service unavailable: can't verify tickets right now. Try again.", false);
       else show("door-msg", errorText(r), false);
       $("door-code").value = "";
@@ -259,6 +261,11 @@
       const p = document.createElement("p");
       p.textContent = lines.join("  ·  ");
       const parts = [p];
+      if (b.by_gate && Object.keys(b.by_gate).length) {
+        const g = document.createElement("p");
+        g.textContent = "By gate: " + Object.entries(b.by_gate).map(([k, v]) => k + " " + v).join("  ·  ");
+        parts.push(g);
+      }
       if (b.notice) { const n = document.createElement("p"); n.className = "bad"; n.textContent = b.notice; parts.push(n); }
       if (b.arrivals.length) {
         const t = document.createElement("table");

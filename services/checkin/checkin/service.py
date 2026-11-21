@@ -20,10 +20,14 @@ class InvalidTicket(CheckInError):
 
 
 class AlreadyCheckedIn(CheckInError):
-    def __init__(self, code, checked_in_at):
-        super().__init__(f"{code} already checked in at {checked_in_at}")
+    def __init__(self, code, checked_in_at, gate="main"):
+        super().__init__(f"{code} already checked in at {checked_in_at} (gate {gate})")
         self.code = code
         self.checked_in_at = checked_in_at
+        self.gate = gate
+
+
+DEFAULT_GATE = "main"  # also the value migration 002 gave every check-in made before it
 
 
 # Same helpers as tickets/service.py, copied on purpose: importing them would
@@ -42,10 +46,11 @@ def _from_iso(text):
     return datetime.fromisoformat(text.replace("Z", "+00:00"))
 
 
-def check_in(conn, code, event_id, validate, now=None):
-    """Let a ticket in, or raise InvalidTicket / AlreadyCheckedIn."""
+def check_in(conn, code, event_id, validate, now=None, gate=None):
+    """Let a ticket in at a gate, or raise InvalidTicket / AlreadyCheckedIn."""
     code = code.strip()
     now = now or _now()
+    gate = str(gate or "").strip()[:50] or DEFAULT_GATE
 
     status = validate(code, event_id)
     if status != "valid":
@@ -56,16 +61,16 @@ def check_in(conn, code, event_id, validate, now=None):
     try:
         with conn:
             conn.execute(
-                "INSERT INTO check_ins (ticket_code, event_id, checked_in_at) VALUES (?, ?, ?)",
-                (code, event_id, _to_iso(now)),
+                "INSERT INTO check_ins (ticket_code, event_id, checked_in_at, gate) VALUES (?, ?, ?, ?)",
+                (code, event_id, _to_iso(now), gate),
             )
     except IntegrityError:
         first = conn.execute(
-            "SELECT checked_in_at FROM check_ins WHERE ticket_code = ?", (code,)
+            "SELECT checked_in_at, gate FROM check_ins WHERE ticket_code = ?", (code,)
         ).fetchone()
         if first is None:  # some other constraint failed, not a double entry
             raise
-        raise AlreadyCheckedIn(code, first[0])
+        raise AlreadyCheckedIn(code, first[0], first[1])
 
 
 def attendance(conn, event_id, tickets_sold):
@@ -101,3 +106,12 @@ def arrivals_by_slot(conn, event_id, minutes=15):
         key = _to_iso(slot)
         slots[key] = slots.get(key, 0) + 1
     return list(slots.items())
+
+
+def check_ins_by_gate(conn, event_id):
+    """How many people came in through each gate, e.g. {'main': 40, 'North': 12}."""
+    rows = conn.execute(
+        "SELECT gate, COUNT(*) FROM check_ins WHERE event_id = ? GROUP BY gate ORDER BY gate",
+        (event_id,),
+    ).fetchall()
+    return {gate: count for gate, count in rows}
