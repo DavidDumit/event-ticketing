@@ -1,0 +1,82 @@
+openapi: 3.0.3
+info:
+  title: Check-in service
+  version: "1.0"
+  description: >
+    Door check-in and attendance report. Called by the UI from the browser (CORS: only
+    UI_ORIGIN). To validate a code and get tickets sold it calls the tickets service
+    (TICKETS_URL, timeout TICKETS_TIMEOUT_S); if tickets is down, check-ins return 503 and the
+    report is returned without the sales figures.
+servers:
+  - url: http://localhost:8002
+    description: docker compose
+paths:
+  /health:
+    get:
+      summary: Can this service use its own database? (does not depend on the tickets service)
+      responses:
+        "200": { description: Healthy, content: { application/json: { schema: { $ref: "#/components/schemas/Health" } } } }
+        "503": { description: Database unreachable, content: { application/json: { schema: { $ref: "#/components/schemas/Health" } } } }
+  /events/{event_id}/checkins:
+    parameters: [ { $ref: "#/components/parameters/EventId" } ]
+    post:
+      summary: Check a ticket in at the door (once per ticket)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [code], properties: { code: { type: string, description: Spaces around it are ignored } } }
+      responses:
+        "201":
+          description: Checked in
+          content: { application/json: { schema: { type: object, properties: { code: { type: string }, status: { type: string, enum: [checked_in] } } } } }
+        "400": { description: Missing code, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "404": { description: EventNotFound, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "409":
+          description: InvalidTicket (with reason) or AlreadyCheckedIn (with the time of the first check-in)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string, enum: [InvalidTicket, AlreadyCheckedIn] }
+                  reason: { type: string, enum: [cancelled, wrong_event, unknown] }
+                  checked_in_at: { type: string, format: date-time }
+        "503": { description: "TicketsUnavailable: the tickets service didn't answer in time", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /events/{event_id}/report:
+    parameters: [ { $ref: "#/components/parameters/EventId" } ]
+    get:
+      summary: Attendance report; degrades (null sales figures + notice) when tickets is down
+      responses:
+        "200":
+          description: Report
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  event_id: { type: integer }
+                  checked_in: { type: integer }
+                  tickets_sold: { type: integer, nullable: true }
+                  no_shows: { type: integer, nullable: true }
+                  rate: { type: number, nullable: true, description: Attendance in percent }
+                  arrivals:
+                    type: array
+                    items: { type: object, properties: { slot_start: { type: string, format: date-time }, count: { type: integer } } }
+                  notice: { type: string, description: Only present when the tickets service is unavailable }
+        "404": { description: EventNotFound, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+components:
+  parameters:
+    EventId: { name: event_id, in: path, required: true, schema: { type: integer } }
+  schemas:
+    Health:
+      type: object
+      properties:
+        status: { type: string, enum: [ok, error] }
+        db: { type: string, enum: [ok, unavailable] }
+        version: { type: string }
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+        detail: { type: string }
