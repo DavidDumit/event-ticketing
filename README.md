@@ -211,6 +211,14 @@ Each service owns its schema in `services/<name>/migrations/NNN_name.sql`. On st
 service applies, in order and each in its own transaction, every file not yet listed in its
 `schema_migrations` table. Applied files are never edited: a change is always a new file.
 
+| Service | Migrations |
+|---|---|
+| tickets | `001_init.sql`: events and tickets |
+| checkin | `001_init.sql`: check_ins; `002_add_gate.sql`: adds `gate` (NOT NULL, default `'main'`) to a table that already holds check-ins |
+
+Migration 002 is deployed to Azure while the live check-in database already has check-ins;
+those rows are kept and get gate `main`.
+
 ## Documentation
 
 - `ADR.md`: architecture decisions (1-5 from Assignment 1, 6-8 from Assignment 2)

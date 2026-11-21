@@ -174,3 +174,34 @@ def test_checkin_service_does_not_touch_the_tickets_domain():
     assert not re.search(r"^\s*(from|import)\s+tickets\b", source, re.MULTILINE)
     tables = re.findall(r"\b(?:FROM|JOIN|INTO|UPDATE)\s+(\w+)", source)
     assert tables and set(tables) == {"check_ins"}
+
+
+# --- gates (migration 002) ------------------------------------------------
+
+def test_check_in_without_a_gate_uses_main(conn):
+    scan(conn, "GOOD1")
+
+    assert conn.execute("SELECT gate FROM check_ins").fetchone()[0] == "main"
+
+
+def test_check_in_stores_the_gate(conn):
+    service.check_in(conn, "GOOD1", EVENT_ID, fake_validate, now=DOORS_OPEN, gate=" North ")
+
+    assert conn.execute("SELECT gate FROM check_ins").fetchone()[0] == "North"
+
+
+def test_double_entry_error_says_at_which_gate_it_was_first_used(conn):
+    service.check_in(conn, "GOOD1", EVENT_ID, fake_validate, now=DOORS_OPEN, gate="North")
+
+    with pytest.raises(AlreadyCheckedIn) as error:
+        service.check_in(conn, "GOOD1", EVENT_ID, fake_validate, now=at(5), gate="South")
+
+    assert error.value.gate == "North"
+
+
+def test_check_ins_by_gate_counts_each_gate_for_this_event(conn):
+    service.check_in(conn, "GOOD1", 1, fake_validate, now=DOORS_OPEN, gate="North")
+    service.check_in(conn, "GOOD2", 1, fake_validate, now=DOORS_OPEN)
+    service.check_in(conn, "GOOD3", 2, fake_validate, now=DOORS_OPEN, gate="North")
+
+    assert service.check_ins_by_gate(conn, 1) == {"North": 1, "main": 1}

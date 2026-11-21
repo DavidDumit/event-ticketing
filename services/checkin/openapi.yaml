@@ -25,7 +25,12 @@ paths:
         required: true
         content:
           application/json:
-            schema: { type: object, required: [code], properties: { code: { type: string, description: Spaces around it are ignored } } }
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string, description: Spaces around it are ignored }
+                gate: { type: string, maxLength: 50, default: main, description: Gate (door) where the ticket is scanned }
       responses:
         "201":
           description: Checked in
@@ -42,6 +47,7 @@ paths:
                   error: { type: string, enum: [InvalidTicket, AlreadyCheckedIn] }
                   reason: { type: string, enum: [cancelled, wrong_event, unknown] }
                   checked_in_at: { type: string, format: date-time }
+                  gate: { type: string, description: Gate of the first check-in (AlreadyCheckedIn only) }
         "503": { description: "TicketsUnavailable: the tickets service didn't answer in time", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
   /events/{event_id}/report:
     parameters: [ { $ref: "#/components/parameters/EventId" } ]
@@ -63,6 +69,7 @@ paths:
                   arrivals:
                     type: array
                     items: { type: object, properties: { slot_start: { type: string, format: date-time }, count: { type: integer } } }
+                  by_gate: { type: object, additionalProperties: { type: integer }, description: "Check-ins per gate, e.g. {main: 40, North: 12}" }
                   notice: { type: string, description: Only present when the tickets service is unavailable }
         "404": { description: EventNotFound, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
 components:
