@@ -233,7 +233,7 @@ two tickets for the same email: the event and its tickets were kept, the event g
 
 ## Documentation
 
-- `ADR.md`: architecture decisions (1-5 from Assignment 1, 6-9 from Assignment 2)
+- `ADR.md`: architecture decisions (1-5 from Assignment 1, 6-10 from Assignment 2)
 - `system.yaml`: the whole system (services, env vars, calls, Azure resources), checked in CI against the provided `system.schema.json` and against the code (`scripts/check_system.py`)
 - `services/<name>/openapi.yaml`: the HTTP API of each service
 - `AI_USAGE.md`: how AI was used, and how the accepted code works
