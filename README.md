@@ -3,9 +3,13 @@
 A web app for a university student association: organisers create events and
 sell tickets, door volunteers check people in and see attendance reports.
 
-> **Assignment 2 in progress.** The Assignment 1 monolith has been split into two
-> services along the seam from ADR-2. This is the initial services structure;
-> SQL Server, migrations, CI/CD and the Azure deployment come next.
+**Live system: https://ddumitrescuieu2024ui.z1.web.core.windows.net** (Azure Storage static
+website; the two services run on Azure Container Apps and scale to zero, so the first request after
+a quiet period can take about a minute while they start).
+
+Assignment 2: the Assignment 1 monolith split into two services along the seam from ADR-2, each with
+its own SQL Server database and versioned migrations, run locally with docker compose, tested and
+deployed to Azure by GitHub Actions on every merge to main.
 
 ## Structure
 
@@ -15,7 +19,7 @@ sell tickets, door volunteers check people in and see attendance reports.
 | `services/checkin/` | Check-in service: door check-ins and attendance reports (JSON API) | its own database: `check_ins` |
 | `ui/` | Static UI (one HTML page + `config.js`), served by nginx locally; calls both services from the browser | — |
 
-Each service has its own `Dockerfile`, `requirements.txt`, schema and tests.
+Each service has its own `Dockerfile`, `requirements.txt`, `migrations/`, `openapi.yaml` and tests.
 
 **The seam.** Check-in never reads the tickets database. It calls the tickets
 service over HTTP (`tickets_client.py`) for two things:
@@ -56,8 +60,12 @@ Partial failure: `docker compose stop tickets`, then check-in still answers
 cd services/tickets            # or services/checkin
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-PORT=8001 python app.py        # check-in: PORT=8002 TICKETS_URL=http://localhost:8001 python app.py
+export DATABASE_URL="mssql+pymssql://tickets_user:<TICKETS_DB_PASSWORD>@localhost:1433/tickets"
+PORT=8001 python app.py
+# check-in: DATABASE_URL=...checkin_user...@localhost:1433/checkin PORT=8002 TICKETS_URL=http://localhost:8001 python app.py
 ```
+
+It needs a SQL Server: the easiest is `docker compose up -d sqlserver db-init` first.
 
 ## Azure deployment (initial setup, run once)
 
