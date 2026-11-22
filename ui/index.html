@@ -38,11 +38,12 @@
       <label>Venue <input name="venue" required></label>
       <label>Starts at <input name="starts_at" type="datetime-local" required></label>
       <label>Capacity <input name="capacity" type="number" min="1" required style="width:6rem"></label>
+      <label>Max per email <input name="max_tickets_per_email" type="number" min="1" value="2" style="width:6rem"></label>
       <button>Create event</button>
     </form>
     <p class="msg" id="event-msg"></p>
     <table>
-      <thead><tr><th>Event</th><th>Venue</th><th>Starts</th><th>Sold / capacity</th></tr></thead>
+      <thead><tr><th>Event</th><th>Venue</th><th>Starts</th><th>Sold / capacity</th><th>Max per email</th></tr></thead>
       <tbody id="event-rows"></tbody>
     </table>
   </section>
@@ -154,7 +155,7 @@
     const TICKET_ERRORS = {
       SalesClosed: "Sales are closed: the event has already started.",
       SoldOut: "Sold out.",
-      TicketLimitReached: "This email already has the maximum of 2 tickets.",
+      TicketLimitReached: "This email already has the maximum number of tickets for this event.",
       EventNotFound: "Event not found.",
       TicketAlreadyCancelled: "Ticket was already cancelled.",
     };
@@ -178,7 +179,7 @@
       if (!r.ok) { show("event-msg", "Could not load events: " + errorText(r), false); return; }
       const keep = $("event-select").value;
       $("event-rows").replaceChildren(...r.body.map((e) =>
-        row([e.name, e.venue, when(e.starts_at), e.sold + " / " + e.capacity])));
+        row([e.name, e.venue, when(e.starts_at), e.sold + " / " + e.capacity, e.max_tickets_per_email])));
       $("event-select").replaceChildren(...r.body.map((e) => new Option(e.name + " (#" + e.id + ")", e.id)));
       if (keep && r.body.some((e) => String(e.id) === keep)) $("event-select").value = keep;
       refreshSelected();
@@ -192,6 +193,7 @@
         venue: f.get("venue"),
         starts_at: new Date(f.get("starts_at")).toISOString(),  // local time -> UTC
         capacity: Number(f.get("capacity")),
+        max_tickets_per_email: Number(f.get("max_tickets_per_email") || 2),
       });
       if (r.ok) { show("event-msg", "Event created.", true); ev.target.reset(); await loadEvents(); $("event-select").value = r.body.id; refreshSelected(); }
       else show("event-msg", errorText(r), false);

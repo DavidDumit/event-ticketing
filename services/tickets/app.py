@@ -89,11 +89,14 @@ def create_app():
         name = str(body.get("name", "")).strip()
         venue = str(body.get("venue", "")).strip()
         capacity = body.get("capacity")
+        limit = body.get("max_tickets_per_email", service.MAX_TICKETS_PER_EMAIL)
         if not name or not venue or not isinstance(capacity, int) or capacity <= 0:
             return jsonify(error="ValidationError",
                            detail="name, venue and a whole-number capacity > 0 are required"), 400
+        if not isinstance(limit, int) or limit <= 0:
+            return jsonify(error="ValidationError", detail="max_tickets_per_email must be a whole number > 0"), 400
         try:
-            event_id = service.create_event(db.get_db(), name, venue, body.get("starts_at", ""), capacity)
+            event_id = service.create_event(db.get_db(), name, venue, body.get("starts_at", ""), capacity, limit)
         except (ValueError, TypeError):
             return jsonify(error="ValidationError", detail="starts_at must be an ISO-8601 time"), 400
         return jsonify(id=event_id), 201

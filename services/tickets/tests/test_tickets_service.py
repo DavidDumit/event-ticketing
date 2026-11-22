@@ -197,3 +197,19 @@ def test_validate_returns_unknown_for_an_unknown_code(conn):
     event_id = make_event(conn)
 
     assert service.validate_ticket(conn, "no-such-code", event_id) == "unknown"
+
+
+# --- per-event ticket limit (migration 003) ------------------------------
+
+def test_event_gets_the_default_limit_of_two(conn):
+    event_id = make_event(conn)
+
+    assert service.get_event(conn, event_id)["max_tickets_per_email"] == 2
+
+
+def test_event_with_a_limit_of_one_refuses_the_second_ticket(conn):
+    event_id = service.create_event(conn, "Gala", "Hall", "2026-12-01T20:00:00Z", 10, max_tickets_per_email=1)
+    service.issue_ticket(conn, event_id, "Ana", "ana@example.com", now=BEFORE_START)
+
+    with pytest.raises(TicketLimitReached):
+        service.issue_ticket(conn, event_id, "Ana", "ana@example.com", now=BEFORE_START)

@@ -2,7 +2,7 @@
 import secrets
 from datetime import datetime, timezone
 
-MAX_TICKETS_PER_EMAIL = 2
+MAX_TICKETS_PER_EMAIL = 2  # default per event; also what migration 003 gave the events that existed
 
 
 class TicketError(Exception):
@@ -50,14 +50,14 @@ def _from_iso(text):
     return dt
 
 
-def create_event(conn, name, venue, starts_at, capacity):
-    """Store a new event and return its id. capacity > 0 is enforced by the database."""
+def create_event(conn, name, venue, starts_at, capacity, max_tickets_per_email=MAX_TICKETS_PER_EMAIL):
+    """Store a new event and return its id. capacity > 0 and the limit > 0 are enforced by the database."""
     starts_at = _to_iso(_from_iso(starts_at))  # normalise so every stored time looks the same
     with conn:
         row = conn.execute(
-            "INSERT INTO events (name, venue, starts_at, capacity, created_at) "
-            "OUTPUT INSERTED.id VALUES (?, ?, ?, ?, ?)",
-            (name, venue, starts_at, capacity, _to_iso(_now())),
+            "INSERT INTO events (name, venue, starts_at, capacity, max_tickets_per_email, created_at) "
+            "OUTPUT INSERTED.id VALUES (?, ?, ?, ?, ?, ?)",
+            (name, venue, starts_at, capacity, max_tickets_per_email, _to_iso(_now())),
         ).fetchone()
     return int(row[0])
 
@@ -72,7 +72,8 @@ def issue_ticket(conn, event_id, holder_name, holder_email, now=None):
     # see the last free seat. Sales for other events are not blocked.
     try:
         event = conn.execute(
-            "SELECT starts_at, capacity FROM events WITH (UPDLOCK, HOLDLOCK) WHERE id = ?", (event_id,)
+            "SELECT starts_at, capacity, max_tickets_per_email FROM events WITH (UPDLOCK, HOLDLOCK) WHERE id = ?",
+            (event_id,),
         ).fetchone()
         if event is None:
             raise EventNotFound(event_id)
@@ -90,7 +91,7 @@ def issue_ticket(conn, event_id, holder_name, holder_email, now=None):
             "SELECT COUNT(*) FROM tickets WHERE event_id = ? AND holder_email = ? AND status = 'valid'",
             (event_id, holder_email),
         ).fetchone()[0]
-        if held >= MAX_TICKETS_PER_EMAIL:
+        if held >= event[2]:  # this event's own limit (migration 003)
             raise TicketLimitReached(holder_email)
 
         code = secrets.token_urlsafe(8)
@@ -140,7 +141,7 @@ def _dicts(cur):
 
 
 _EVENTS_WITH_SOLD = (
-    "SELECT e.id, e.name, e.venue, e.starts_at, e.capacity, "
+    "SELECT e.id, e.name, e.venue, e.starts_at, e.capacity, e.max_tickets_per_email, "
     "(SELECT COUNT(*) FROM tickets t WHERE t.event_id = e.id AND t.status = 'valid') AS sold "
     "FROM events e"
 )
