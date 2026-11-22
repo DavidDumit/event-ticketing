@@ -136,7 +136,7 @@ def validate_ticket(conn, code, event_id):
 def _dicts(cur):
     """Rows as plain dicts, using the column names from the cursor."""
     columns = [c[0] for c in cur.description]
-    return [dict(zip(columns, row)) for row in cur.fetchall()]
+    return [dict(zip(columns, row, strict=True)) for row in cur.fetchall()]
 
 
 _EVENTS_WITH_SOLD = (

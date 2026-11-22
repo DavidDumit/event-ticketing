@@ -70,7 +70,7 @@ def check_in(conn, code, event_id, validate, now=None, gate=None):
         ).fetchone()
         if first is None:  # some other constraint failed, not a double entry
             raise
-        raise AlreadyCheckedIn(code, first[0], first[1])
+        raise AlreadyCheckedIn(code, first[0], first[1]) from None  # the IntegrityError is expected here
 
 
 def attendance(conn, event_id, tickets_sold):

@@ -1,6 +1,8 @@
 # CI: runs on every push to a branch other than main and on every pull request.
 #     On main it is called by cd.yml (workflow_call), so it doesn't run twice.
 #  - system: checks system.yaml against system.schema.json and the code, and the OpenAPI files
+#  - lint:   ruff on all Python code
+#  - integration: both services + SQL Server in compose; tests across the seam, also with tickets stopped
 #  - test:   installs and tests each service against a throwaway SQL Server,
 #            fails if coverage < 70%
 #  - images: builds the Docker image of each service; pushes it to GHCR,
@@ -68,8 +70,49 @@ jobs:
       - name: system.yaml matches the code (env vars, folders, called endpoints)
         run: python scripts/check_system.py
 
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint all Python code (settings in ruff.toml)
+        run: pipx run --spec ruff==0.16.9 ruff check .
+
+  integration:
+    # Both real services + SQL Server with docker compose: check-in calls tickets over HTTP
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Throwaway passwords for this run (.env is never committed)
+        run: |
+          pw() { echo "Ci1-$(openssl rand -hex 12)"; }
+          printf 'MSSQL_SA_PASSWORD=%s\nTICKETS_DB_PASSWORD=%s\nCHECKIN_DB_PASSWORD=%s\n' "$(pw)" "$(pw)" "$(pw)" > .env
+      - name: Start SQL Server, tickets and check-in
+        run: docker compose up -d --build sqlserver db-init tickets checkin
+      - name: Wait until both services are healthy
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fs localhost:8001/health && curl -fs localhost:8002/health; then echo; echo "healthy"; exit 0; fi
+            sleep 5
+          done
+          docker compose logs; exit 1
+      - run: pip install pytest==8.3.3
+      - name: Seam tests with both services up
+        env: { TICKETS_URL: "http://localhost:8001", CHECKIN_URL: "http://localhost:8002" }
+        run: python -m pytest tests/integration -m tickets_up -v
+      - name: Stop the tickets service
+        run: docker compose stop tickets
+      - name: Seam tests with tickets down (check-in must fail clearly, not hang)
+        env: { TICKETS_URL: "http://localhost:8001", CHECKIN_URL: "http://localhost:8002" }
+        run: python -m pytest tests/integration -m tickets_down -v
+      - name: Service logs (on failure)
+        if: failure()
+        run: docker compose logs
+
   images:
-    needs: [test, system]   # only build images of code whose tests passed
+    needs: [test, system, lint, integration]   # only build images of code whose tests passed
     runs-on: ubuntu-latest
     permissions:
       contents: read

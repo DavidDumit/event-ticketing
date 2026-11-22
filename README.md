@@ -205,6 +205,17 @@ cd services/checkin && TEST_DATABASE_URL="mssql+pymssql://sa:<MSSQL_SA_PASSWORD>
 
 In CI each job starts its own throwaway SQL Server container with a random password.
 
+Integration tests across the seam (both real services talking over HTTP), with compose running:
+
+```bash
+TICKETS_URL=http://localhost:8001 CHECKIN_URL=http://localhost:8002 pytest tests/integration -m tickets_up
+docker compose stop tickets
+TICKETS_URL=http://localhost:8001 CHECKIN_URL=http://localhost:8002 pytest tests/integration -m tickets_down
+```
+
+Lint: `ruff check .` (settings in `ruff.toml`). CI runs test, system, lint and integration on every
+pull request; images are only built when all four pass.
+
 ## Migrations
 
 Each service owns its schema in `services/<name>/migrations/NNN_name.sql`. On startup the
@@ -221,7 +232,7 @@ those rows are kept and get gate `main`.
 
 ## Documentation
 
-- `ADR.md`: architecture decisions (1-5 from Assignment 1, 6-8 from Assignment 2)
+- `ADR.md`: architecture decisions (1-5 from Assignment 1, 6-9 from Assignment 2)
 - `system.yaml`: the whole system (services, env vars, calls, Azure resources), checked in CI against the provided `system.schema.json` and against the code (`scripts/check_system.py`)
 - `services/<name>/openapi.yaml`: the HTTP API of each service
 - `AI_USAGE.md`: how AI was used, and how the accepted code works

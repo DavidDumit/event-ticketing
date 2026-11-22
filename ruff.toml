@@ -1,0 +1,7 @@
+# Lint settings for the whole repository (run in CI: ruff check .)
+target-version = "py312"
+line-length = 120
+
+[lint]
+# E/W: style errors, F: real mistakes (unused or undefined names), B: likely bugs
+select = ["E", "F", "W", "B"]
