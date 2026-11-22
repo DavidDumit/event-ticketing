@@ -37,6 +37,7 @@ paths:
                 venue: { type: string, example: Aula Magna }
                 starts_at: { type: string, format: date-time, example: "2026-12-01T19:00:00Z" }
                 capacity: { type: integer, minimum: 1, example: 120 }
+                max_tickets_per_email: { type: integer, minimum: 1, default: 2, description: Valid tickets one email may hold for this event }
       responses:
         "201":
           description: Created
@@ -58,7 +59,7 @@ paths:
           description: Tickets
           content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Ticket" } } } }
     post:
-      summary: Issue a ticket (max 2 valid tickets per email per event; not after the start; not over capacity)
+      summary: Issue a ticket (not more than the event's max_tickets_per_email per email; not after the start; not over capacity)
       requestBody:
         required: true
         content:
@@ -118,6 +119,7 @@ components:
         venue: { type: string }
         starts_at: { type: string, format: date-time }
         capacity: { type: integer }
+        max_tickets_per_email: { type: integer, description: "Per-event limit (migration 003; events created before it got 2)" }
         sold: { type: integer, description: Valid (not cancelled) tickets }
     Ticket:
       type: object

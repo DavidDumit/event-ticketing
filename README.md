@@ -224,11 +224,12 @@ service applies, in order and each in its own transaction, every file not yet li
 
 | Service | Migrations |
 |---|---|
-| tickets | `001_init.sql`: events and tickets |
+| tickets | `001_init.sql`: events and tickets; `003_event_ticket_limit.sql`: adds `max_tickets_per_email` (NOT NULL, default 2) to `events`, which already holds events |
 | checkin | `001_init.sql`: check_ins; `002_add_gate.sql`: adds `gate` (NOT NULL, default `'main'`) to a table that already holds check-ins |
 
-Migration 002 is deployed to Azure while the live check-in database already has check-ins;
-those rows are kept and get gate `main`.
+Migration 003 was deployed to Azure while the live tickets database already held an event with
+two tickets for the same email: the event and its tickets were kept, the event got
+`max_tickets_per_email = 2`, and a third ticket for that email is still refused (evidence in the report).
 
 ## Documentation
 
